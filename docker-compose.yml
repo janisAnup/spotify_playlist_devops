@@ -1,0 +1,15 @@
+services:
+
+  mongodb:
+    image: mongo:7
+    container_name: spotify_mongo
+    ports:
+      - "27017:27017"
+
+  api:
+    build: .
+    container_name: spotify_api
+    ports:
+      - "5000:5000"
+    depends_on:
+      - mongodb
