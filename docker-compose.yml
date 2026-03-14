@@ -1,5 +1,4 @@
 services:
-
   mongodb:
     image: mongo:7
     container_name: spotify_mongo
@@ -11,5 +10,7 @@ services:
     container_name: spotify_api
     ports:
       - "5000:5000"
+    env_file:
+      - .env
     depends_on:
       - mongodb

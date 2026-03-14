@@ -1,5 +1,5 @@
-
-
+from flask import redirect
+from spotify_auth import sp_oauth
 from flask import Flask, request, jsonify
 from db import playlists_collection
 import random
@@ -16,6 +16,24 @@ def home():
 def health():
     playlists_collection.insert_one({"status": "API working"})
     return {"status": "API running and DB connected"}
+
+
+@app.route("/login")
+def login():
+    auth_url = sp_oauth.get_authorize_url()
+    return redirect(auth_url)
+
+
+@app.route("/callback")
+def callback():
+    code = request.args.get("code")
+
+    token_info = sp_oauth.get_access_token(code)
+    access_token = token_info["access_token"]
+
+    return {
+        "message": "Spotify login successful"
+    }
 
 
 @app.route("/generate_playlist", methods=["POST"])
