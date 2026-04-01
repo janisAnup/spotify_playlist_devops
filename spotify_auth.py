@@ -6,7 +6,7 @@ load_dotenv()
 
 SPOTIFY_SCOPE = (
     "user-read-private user-read-email playlist-modify-public "
-    "playlist-modify-private playlist-read-private"
+    "playlist-modify-private playlist-read-private user-top-read"
 )
 
 REQUIRED_SPOTIFY_ENV_VARS = (
