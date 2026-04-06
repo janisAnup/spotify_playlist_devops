@@ -1,4 +1,5 @@
 import os
+import logging
 from collections import Counter
 from datetime import datetime, timezone
 
@@ -209,6 +210,9 @@ mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000)
 db = mongo_client["spotify_playlist_db"]
 playlists_collection = db["playlists"]
 presets_collection = db["presets"]
+SPOTIPY_CLIENT_LOGGER = logging.getLogger("spotipy.client")
+SPOTIPY_CLIENT_LOGGER.setLevel(logging.CRITICAL)
+SPOTIPY_CLIENT_LOGGER.propagate = False
 
 
 def error_response(message, status_code, details=None, warning=None):
@@ -400,6 +404,25 @@ def get_spotify_client():
     return spotify_client, None
 
 
+def safe_fetch_artists(sp, artist_ids):
+    if not artist_ids:
+        return []
+
+    previous_level = SPOTIPY_CLIENT_LOGGER.level
+    SPOTIPY_CLIENT_LOGGER.setLevel(logging.CRITICAL)
+    try:
+        response = sp.artists(artist_ids)
+        return response.get("artists", []) if isinstance(response, dict) else []
+    except SpotifyException as error:
+        if error.http_status in {401, 403, 404, 429}:
+            return []
+        raise
+    except Exception:
+        return []
+    finally:
+        SPOTIPY_CLIENT_LOGGER.setLevel(previous_level)
+
+
 def build_search_queries(mood, genre, vibe):
     mood_terms = MOOD_KEYWORDS.get(mood, [])[:2]
     vibe_terms = VIBE_KEYWORDS.get(vibe, [])[:2]
@@ -493,7 +516,6 @@ def collect_seed_candidate_tracks(
         "limit": max(20, min(MAX_TRACK_CANDIDATES, count * 4)),
     }
 
-    # Spotify recommendations accepts up to five combined seed items.
     trimmed_seed_tracks = seed_track_ids[:MAX_SEED_ITEMS]
     remaining_seed_slots = max(0, MAX_SEED_ITEMS - len(trimmed_seed_tracks))
     trimmed_seed_artists = seed_artist_ids[:remaining_seed_slots]
@@ -524,7 +546,6 @@ def collect_seed_candidate_tracks(
         seen_track_ids.add(track_id)
         collected_tracks.append(track)
 
-    # Pull each seeded artist's top tracks to enrich the candidate pool with stronger matches.
     for artist_id in seed_artist_ids:
         try:
             artist_top_tracks = sp.artist_top_tracks(artist_id).get("tracks", [])
@@ -556,12 +577,7 @@ def get_artist_genre_map(sp, tracks):
     artist_genre_map = {}
 
     for artist_batch in chunked(artist_ids, ARTIST_BATCH_SIZE):
-        try:
-            artist_response = sp.artists(artist_batch)
-        except Exception:
-            continue
-
-        for artist in artist_response.get("artists", []):
+        for artist in safe_fetch_artists(sp, artist_batch):
             if not artist or not artist.get("id"):
                 continue
 
@@ -1064,7 +1080,7 @@ def select_playlist_tracks(
     return selected_tracks, warning_messages
 
 
-def get_tracks_by_ids(sp, track_ids):
+def get_tracks_by_ids(sp, track_ids, market=None):
     ordered_track_ids = unique_preserve_order(
         [str(track_id).strip() for track_id in track_ids if str(track_id).strip()]
     )
@@ -1075,7 +1091,10 @@ def get_tracks_by_ids(sp, track_ids):
 
     for track_id_batch in chunked(ordered_track_ids, ARTIST_BATCH_SIZE):
         try:
-            response = sp.tracks(track_id_batch, market="US")
+            request_kwargs = {}
+            if market:
+                request_kwargs["market"] = market
+            response = sp.tracks(track_id_batch, **request_kwargs)
         except Exception:
             continue
 
@@ -1464,14 +1483,11 @@ def enrich_top_artists(sp, artists):
     if not artist_ids:
         return artists
 
-    try:
-        artist_lookup = {
-            artist.get("id"): artist
-            for artist in sp.artists(artist_ids).get("artists", [])
-            if artist and artist.get("id")
-        }
-    except Exception:
-        return artists
+    artist_lookup = {
+        artist.get("id"): artist
+        for artist in safe_fetch_artists(sp, artist_ids)
+        if artist and artist.get("id")
+    }
 
     enriched_artists = []
 
@@ -1764,7 +1780,14 @@ def generate_playlist():
         warning_messages = []
 
         if requested_track_ids:
-            selected_tracks = get_tracks_by_ids(sp, requested_track_ids)
+            selected_tracks = []
+            track_uris = unique_preserve_order(
+                [
+                    f"spotify:track:{track_id}"
+                    for track_id in requested_track_ids
+                    if track_id
+                ]
+            )[:count]
         else:
             selected_tracks, warning_messages = select_playlist_tracks(
                 sp,
@@ -1778,19 +1801,20 @@ def generate_playlist():
                 audio_tuning=audio_tuning,
             )
 
-        if not selected_tracks:
-            return error_response(
-                "No tracks found for the selected mood and genre.",
-                404,
-            )
+        if not requested_track_ids:
+            if not selected_tracks:
+                return error_response(
+                    "No tracks found for the selected mood and genre.",
+                    404,
+                )
 
-        track_uris = unique_preserve_order(
-            [
-                track_uri
-                for track_uri in (get_track_uri(track) for track in selected_tracks)
-                if track_uri
-            ]
-        )[:count]
+            track_uris = unique_preserve_order(
+                [
+                    track_uri
+                    for track_uri in (get_track_uri(track) for track in selected_tracks)
+                    if track_uri
+                ]
+            )[:count]
 
         if not track_uris:
             return error_response(

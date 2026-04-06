@@ -31,6 +31,15 @@ export const tabItems = [
   { id: "history", label: "History", eyebrow: "Archive" }
 ];
 
+export function createDefaultInsights() {
+  return {
+    profile_snapshot: null,
+    top_artists: [],
+    top_tracks: [],
+    top_genres: []
+  };
+}
+
 export const defaultForm = {
   mood: "chill",
   genre: "indie",

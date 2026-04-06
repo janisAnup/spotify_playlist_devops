@@ -10,13 +10,15 @@ function ArtistCard({ artist }) {
 }
 
 function TrackRow({ track, index }) {
+  const artists = Array.isArray(track?.artists) ? track.artists.join(", ") : "Spotify artist";
+
   return (
     <article className="track-row">
       <span className="track-row__index">#{index + 1}</span>
       {track.image_url ? <img src={track.image_url} alt={track.name} className="track-row__image" /> : <div className="track-row__image placeholder" />}
       <div className="track-row__body">
         <h3>{track.name}</h3>
-        <p>{track.artists.join(", ")}</p>
+        <p>{artists}</p>
       </div>
       {track.spotify_url ? (
         <a className="inline-link" href={track.spotify_url} target="_blank" rel="noreferrer">
@@ -28,6 +30,10 @@ function TrackRow({ track, index }) {
 }
 
 export default function InsightsModule({ insights, insightsError }) {
+  const genres = Array.isArray(insights?.top_genres) ? insights.top_genres : [];
+  const artists = Array.isArray(insights?.top_artists) ? insights.top_artists : [];
+  const tracks = Array.isArray(insights?.top_tracks) ? insights.top_tracks : [];
+
   if (insightsError) {
     return (
       <section className="module-stack">
@@ -53,7 +59,7 @@ export default function InsightsModule({ insights, insightsError }) {
       </div>
 
       <div className="genre-cloud">
-        {(insights?.top_genres || []).map((genre) => (
+        {genres.map((genre) => (
           <span key={genre.name} className="genre-pill">
             {genre.name} <strong>{genre.count}</strong>
           </span>
@@ -69,7 +75,7 @@ export default function InsightsModule({ insights, insightsError }) {
             </div>
           </div>
           <div className="media-grid">
-            {(insights?.top_artists || []).map((artist) => (
+            {artists.map((artist) => (
               <ArtistCard key={artist.id || artist.name} artist={artist} />
             ))}
           </div>
@@ -83,7 +89,7 @@ export default function InsightsModule({ insights, insightsError }) {
             </div>
           </div>
           <div className="track-list">
-            {(insights?.top_tracks || []).map((track, index) => (
+            {tracks.map((track, index) => (
               <TrackRow key={track.id || `${track.name}-${index}`} track={track} index={index} />
             ))}
           </div>

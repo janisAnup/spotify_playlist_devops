@@ -1,6 +1,8 @@
 import { formatDate } from "../utils";
 
 export default function HistoryModule({ history }) {
+  const items = Array.isArray(history) ? history : [];
+
   return (
     <section className="module-stack">
       <div className="module-hero">
@@ -14,13 +16,13 @@ export default function HistoryModule({ history }) {
       </div>
 
       <section className="glass-panel history-panel full-width">
-        {history.length === 0 ? (
+        {items.length === 0 ? (
           <div className="history-empty">
             <p>Your generated playlists will show up here after the first successful create.</p>
           </div>
         ) : (
           <div className="history-list">
-            {history.map((item) => (
+            {items.map((item) => (
               <article key={`${item.playlist_name}-${item.created_at}`} className="history-item">
                 <div>
                   <p className="history-title">{item.playlist_name}</p>

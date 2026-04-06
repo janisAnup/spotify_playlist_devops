@@ -11,6 +11,7 @@ function OptionCard({ active, title, caption, onClick }) {
     <button
       type="button"
       className={`option-card${active ? " is-active" : ""}`}
+      aria-pressed={active}
       onClick={onClick}
     >
       <span className="option-card__title">{title}</span>
@@ -19,11 +20,13 @@ function OptionCard({ active, title, caption, onClick }) {
   );
 }
 
-function SeedChip({ active, label, onClick }) {
+function SeedChip({ active, disabled = false, label, onClick }) {
   return (
     <button
       type="button"
       className={`chip-button${active ? " is-active" : ""}`}
+      aria-pressed={active}
+      disabled={disabled}
       onClick={onClick}
     >
       {label}
@@ -34,7 +37,7 @@ function SeedChip({ active, label, onClick }) {
 function ResultPanel({ result }) {
   if (!result) {
     return (
-      <div className="result-panel is-empty">
+      <div className="result-panel is-empty" aria-live="polite">
         <p className="eyebrow">Ready to generate</p>
         <h3>Your playlist will show up here</h3>
         <p>Pick a mood, shape the vibe, and create a playlist that opens directly in Spotify.</p>
@@ -43,7 +46,11 @@ function ResultPanel({ result }) {
   }
 
   return (
-    <div className={`result-panel ${result.type}`}>
+    <div
+      className={`result-panel ${result.type}`}
+      role={result.type === "error" ? "alert" : "status"}
+      aria-live={result.type === "error" ? "assertive" : "polite"}
+    >
       <p className="eyebrow">{result.type === "success" ? "Playlist created" : "Something needs attention"}</p>
       <h3>{result.title}</h3>
       <p>{result.message}</p>
@@ -92,22 +99,22 @@ function PreviewTracksPanel({
 
       <p>{summary.description}</p>
       <div className="preview-chips">
-        {summary.chips.map((chip) => (
-          <span key={chip} className="preview-chip">
+        {summary.chips.map((chip, index) => (
+          <span key={`${chip}-${index}`} className="preview-chip">
             {chip}
           </span>
         ))}
       </div>
 
       {isPreviewing ? (
-        <div className="preview-state">
+        <div className="preview-state" role="status" aria-live="polite">
           <h3>Finding a better mix</h3>
           <p>Matching mood, genre, vibe, and audio features so the final playlist feels more intentional.</p>
         </div>
       ) : null}
 
       {!isPreviewing && previewError ? (
-        <div className="preview-state is-error">
+        <div className="preview-state is-error" role="alert" aria-live="assertive">
           <h3>Preview unavailable</h3>
           <p>{previewError}</p>
         </div>
@@ -167,7 +174,7 @@ function PreviewTracksPanel({
       ) : null}
 
       {!isPreviewing && !previewError && (!preview || !preview.tracks?.length) ? (
-        <div className="preview-state">
+        <div className="preview-state" role="status" aria-live="polite">
           <h3>Draft tracks will appear here</h3>
           <p>Tune the controls and we'll prepare a distinct set before anything is saved to Spotify.</p>
         </div>
@@ -193,13 +200,6 @@ export default function CreateModule({
   toggleSeedTrack,
   toggleSeedArtist,
   updateAudioTuning,
-  presets,
-  presetName,
-  setPresetName,
-  handleSavePreset,
-  applyPreset,
-  deletePreset,
-  presetMessage,
   result,
   summary,
   surfaceMessage
@@ -220,7 +220,7 @@ export default function CreateModule({
 
         <div className="section-stack">
           <div>
-            <label className="section-label">Mood</label>
+            <span className="section-label">Mood</span>
             <div className="option-grid mood-grid">
               {moodOptions.map((option) => (
                 <OptionCard
@@ -235,13 +235,14 @@ export default function CreateModule({
           </div>
 
           <div>
-            <label className="section-label">Genre</label>
+            <span className="section-label">Genre</span>
             <div className="chip-row">
               {genreOptions.map((genre) => (
                 <button
                   key={genre}
                   type="button"
                   className={`chip-button${form.genre === genre ? " is-active" : ""}`}
+                  aria-pressed={form.genre === genre}
                   onClick={() => updateForm("genre", genre)}
                 >
                   {genre}
@@ -251,7 +252,7 @@ export default function CreateModule({
           </div>
 
           <div>
-            <label className="section-label">Vibe direction</label>
+            <span className="section-label">Vibe direction</span>
             <div className="option-grid vibe-grid">
               {vibeOptions.map((option) => (
                 <OptionCard
@@ -266,13 +267,14 @@ export default function CreateModule({
           </div>
 
           <div>
-            <label className="section-label">Seed Tracks (from your top tracks)</label>
+            <span className="section-label">Seed Tracks (from your top tracks)</span>
             <div className="chip-row">
               {topTracks.slice(0, 8).map((track) => (
                 <SeedChip
-                  key={track.id}
+                  key={track.id || track.name}
                   active={Array.isArray(form.seed_track_ids) && form.seed_track_ids.includes(track.id)}
                   label={track.name}
+                  disabled={!track.id}
                   onClick={() => toggleSeedTrack(track.id)}
                 />
               ))}
@@ -281,13 +283,14 @@ export default function CreateModule({
           </div>
 
           <div>
-            <label className="section-label">Seed Artists (from your top artists)</label>
+            <span className="section-label">Seed Artists (from your top artists)</span>
             <div className="chip-row">
               {topArtists.slice(0, 8).map((artist) => (
                 <SeedChip
-                  key={artist.id}
+                  key={artist.id || artist.name}
                   active={Array.isArray(form.seed_artist_ids) && form.seed_artist_ids.includes(artist.id)}
                   label={artist.name}
+                  disabled={!artist.id}
                   onClick={() => toggleSeedArtist(artist.id)}
                 />
               ))}
@@ -296,10 +299,11 @@ export default function CreateModule({
           </div>
 
           <div className="tuning-grid">
-            <label className="section-label">Audio Tuning</label>
+            <span className="section-label">Audio Tuning</span>
             <button
               type="button"
               className={`segment-button${form.audio_tuning_enabled ? " is-active" : ""}`}
+              aria-pressed={form.audio_tuning_enabled}
               onClick={() => updateForm("audio_tuning_enabled", !form.audio_tuning_enabled)}
             >
               {form.audio_tuning_enabled ? "Manual tuning enabled" : "Enable manual tuning"}
@@ -351,6 +355,7 @@ export default function CreateModule({
                     key={count}
                     type="button"
                     className={`segment-button${form.count === count ? " is-active" : ""}`}
+                    aria-pressed={form.count === count}
                     onClick={() => updateForm("count", count)}
                   >
                     {count} songs
@@ -367,6 +372,7 @@ export default function CreateModule({
                     key={option.value}
                     type="button"
                     className={`segment-button${form.visibility === option.value ? " is-active" : ""}`}
+                    aria-pressed={form.visibility === option.value}
                     onClick={() => updateForm("visibility", option.value)}
                   >
                     {option.label}
@@ -376,41 +382,6 @@ export default function CreateModule({
             </div>
           </div>
 
-          <div className="preset-panel">
-            <label className="section-label">Presets</label>
-            <div className="preset-save-row">
-              <input
-                type="text"
-                value={presetName}
-                onChange={(event) => setPresetName(event.target.value)}
-                placeholder="Preset name"
-                className="preset-input"
-              />
-              <button type="button" className="ghost-button" onClick={handleSavePreset}>
-                Save preset
-              </button>
-            </div>
-            {presetMessage ? <p className="surface-message">{presetMessage}</p> : null}
-            {Array.isArray(presets) && presets.length ? (
-              <div className="preset-list">
-                {presets.map((preset) => (
-                  <div key={preset.id} className="preset-item">
-                    <span>{preset.name}</span>
-                    <div className="preset-actions">
-                      <button type="button" className="ghost-button" onClick={() => applyPreset(preset)}>
-                        Apply
-                      </button>
-                      <button type="button" className="ghost-button" onClick={() => deletePreset(preset.id)}>
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="surface-message">No presets saved yet.</p>
-            )}
-          </div>
         </div>
 
         <div className="composer-footer">

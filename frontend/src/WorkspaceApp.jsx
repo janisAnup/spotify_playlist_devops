@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { defaultForm, moodOptions, tabItems, vibeOptions } from "./constants";
-import { API_BASE, apiRequest, getMessage } from "./lib/api";
+import { createDefaultInsights, defaultForm, moodOptions, tabItems, vibeOptions } from "./constants";
+import { API_BASE, apiRequest, getMessage, isAuthScopeIssue, isUnauthorizedResponse } from "./lib/api";
 import CreateModule from "./components/CreateModule";
 import HistoryModule from "./components/HistoryModule";
 import InsightsModule from "./components/InsightsModule";
@@ -47,7 +47,7 @@ function GuestLanding({ surfaceMessage, onLogin }) {
             </a>
           </div>
 
-          {surfaceMessage ? <p className="surface-message guest">{surfaceMessage}</p> : null}
+          {surfaceMessage ? <p className="surface-message guest" role="alert">{surfaceMessage}</p> : null}
         </div>
 
         <div className="showcase-panel illustration-shell">
@@ -114,16 +114,8 @@ function WorkspaceApp() {
   const [authState, setAuthState] = useState("loading");
   const [profile, setProfile] = useState(null);
   const [history, setHistory] = useState([]);
-  const [insights, setInsights] = useState({
-    profile_snapshot: null,
-    top_artists: [],
-    top_tracks: [],
-    top_genres: []
-  });
+  const [insights, setInsights] = useState(createDefaultInsights);
   const [insightsError, setInsightsError] = useState("");
-  const [presets, setPresets] = useState([]);
-  const [presetName, setPresetName] = useState("");
-  const [presetMessage, setPresetMessage] = useState("");
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
@@ -160,6 +152,37 @@ function WorkspaceApp() {
 
   const activeTabMeta = tabItems.find((item) => item.id === activeTab) || tabItems[0];
 
+  function resetWorkspaceState() {
+    setProfile(null);
+    setHistory([]);
+    setInsights(createDefaultInsights());
+    setInsightsError("");
+    setPreview(null);
+    setPreviewError("");
+    setResult(null);
+  }
+
+  function handleUnauthorized(message = "Your Spotify session expired. Please connect again.") {
+    setAuthState("guest");
+    resetWorkspaceState();
+    setSurfaceMessage(message);
+    setActiveTab("welcome");
+  }
+
+  async function ensureActiveSession(actionLabel) {
+    try {
+      const { response, payload } = await apiRequest("/check_session");
+      if (!response.ok || !payload || payload.authenticated !== true) {
+        handleUnauthorized(`Spotify login required to ${actionLabel}. Please connect again.`);
+        return false;
+      }
+      return true;
+    } catch {
+      setSurfaceMessage("Could not verify Spotify session. Please try again.");
+      return false;
+    }
+  }
+
   useEffect(() => {
     let ignore = false;
 
@@ -176,9 +199,7 @@ function WorkspaceApp() {
         if (!payload || payload.authenticated !== true) {
           if (!ignore) {
             setAuthState("guest");
-            setProfile(null);
-            setHistory([]);
-            setPresets([]);
+            resetWorkspaceState();
           }
           return;
         }
@@ -188,7 +209,7 @@ function WorkspaceApp() {
           setActiveTab("create");
         }
 
-        await Promise.all([loadProfile(ignore), loadHistory(ignore), loadInsights(ignore), loadPresets(ignore)]);
+        await Promise.all([loadProfile(ignore), loadHistory(ignore), loadInsights(ignore)]);
       } catch (error) {
         if (!ignore) {
           setAuthState("guest");
@@ -211,10 +232,9 @@ function WorkspaceApp() {
   async function loadProfile(ignore = false) {
     const { response, payload } = await apiRequest("/whoami");
 
-    if (response.status === 401) {
+    if (isUnauthorizedResponse(response, payload)) {
       if (!ignore) {
-        setAuthState("guest");
-        setProfile(null);
+        handleUnauthorized();
       }
       return;
     }
@@ -231,10 +251,9 @@ function WorkspaceApp() {
   async function loadHistory(ignore = false) {
     const { response, payload } = await apiRequest("/playlist_history");
 
-    if (response.status === 401) {
+    if (isUnauthorizedResponse(response, payload)) {
       if (!ignore) {
-        setAuthState("guest");
-        setHistory([]);
+        handleUnauthorized();
       }
       return;
     }
@@ -251,35 +270,12 @@ function WorkspaceApp() {
     }
   }
 
-  async function loadPresets(ignore = false) {
-    const { response, payload } = await apiRequest("/presets");
-
-    if (response.status === 401) {
-      if (!ignore) {
-        setAuthState("guest");
-        setPresets([]);
-      }
-      return;
-    }
-
-    if (!response.ok) {
-      if (!ignore) {
-        setPresets([]);
-      }
-      return;
-    }
-
-    if (!ignore) {
-      setPresets(Array.isArray(payload?.presets) ? payload.presets : []);
-    }
-  }
-
   async function loadInsights(ignore = false) {
     const { response, payload } = await apiRequest("/insights");
 
-    if (response.status === 401) {
+    if (isUnauthorizedResponse(response, payload)) {
       if (!ignore) {
-        setAuthState("guest");
+        handleUnauthorized();
       }
       return;
     }
@@ -332,8 +328,8 @@ function WorkspaceApp() {
         return;
       }
 
-      if (response.status === 401) {
-        setAuthState("guest");
+      if (isUnauthorizedResponse(response, payload)) {
+        handleUnauthorized();
         setPreview(null);
         return;
       }
@@ -399,21 +395,7 @@ function WorkspaceApp() {
       await apiRequest("/logout");
     } finally {
       setAuthState("guest");
-      setProfile(null);
-      setHistory([]);
-      setInsights({
-        profile_snapshot: null,
-        top_artists: [],
-        top_tracks: [],
-        top_genres: []
-      });
-      setPresets([]);
-      setPresetName("");
-      setPresetMessage("");
-      setInsightsError("");
-      setPreview(null);
-      setPreviewError("");
-      setResult(null);
+      resetWorkspaceState();
       setSurfaceMessage("");
       setActiveTab("welcome");
     }
@@ -421,6 +403,11 @@ function WorkspaceApp() {
 
   async function handleGenerate(event) {
     event.preventDefault();
+    const hasSession = await ensureActiveSession("create playlist");
+    if (!hasSession) {
+      return;
+    }
+
     setIsCreating(true);
     setSurfaceMessage("");
     setResult({
@@ -444,10 +431,14 @@ function WorkspaceApp() {
         })
       });
 
-      if (response.status === 401) {
-        setAuthState("guest");
+      if (isUnauthorizedResponse(response, payload)) {
+        handleUnauthorized("Spotify login expired while creating the playlist. Please reconnect and try again.");
         setResult(null);
         return;
+      }
+
+      if (isAuthScopeIssue(response, payload)) {
+        throw new Error("Spotify permissions are missing for playlist creation. Reconnect Spotify and approve access.");
       }
 
       if (!response.ok) {
@@ -463,7 +454,9 @@ function WorkspaceApp() {
       });
 
       await loadHistory();
+      setActiveTab("history");
     } catch (error) {
+      setSurfaceMessage(error.message || "Could not create playlist right now.");
       setResult({
         type: "error",
         title: "Could not create playlist",
@@ -487,7 +480,6 @@ function WorkspaceApp() {
   function toggleSeedSelection(fieldName, itemId, limit = 5) {
     setResult(null);
     setPreviewError("");
-    setPresetMessage("");
     setForm((current) => {
       const currentValues = Array.isArray(current[fieldName]) ? current[fieldName] : [];
       if (currentValues.includes(itemId)) {
@@ -498,7 +490,7 @@ function WorkspaceApp() {
       }
 
       if (currentValues.length >= limit) {
-        setPresetMessage("You can select up to 5 seeds in each group.");
+        setSurfaceMessage("You can select up to 5 seeds in each group.");
         return current;
       }
 
@@ -513,7 +505,7 @@ function WorkspaceApp() {
     const normalizedValue = Math.max(0, Math.min(100, Number(value) || 0));
     setResult(null);
     setPreviewError("");
-    setPresetMessage("");
+    setSurfaceMessage("");
     setForm((current) => ({
       ...current,
       audio_tuning_enabled: true,
@@ -522,81 +514,6 @@ function WorkspaceApp() {
         [featureName]: normalizedValue
       }
     }));
-  }
-
-  async function handleSavePreset() {
-    const trimmedName = presetName.trim();
-    if (!trimmedName) {
-      setPresetMessage("Preset name is required.");
-      return;
-    }
-
-    try {
-      const { response, payload } = await apiRequest("/presets", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          name: trimmedName,
-          config: form
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(getMessage(payload, "Could not save preset."));
-      }
-
-      setPresetName("");
-      setPresetMessage("Preset saved.");
-      await loadPresets();
-    } catch (error) {
-      setPresetMessage(error.message || "Could not save preset.");
-    }
-  }
-
-  function applyPreset(preset) {
-    const config = preset?.config || {};
-    setResult(null);
-    setPreviewError("");
-    setPresetMessage(`Applied preset: ${preset?.name || "Preset"}.`);
-    setForm((current) => ({
-      ...current,
-      mood: config.mood || current.mood,
-      genre: config.genre || current.genre,
-      vibe: config.vibe || current.vibe,
-      count: Number(config.count) || current.count,
-      visibility: config.visibility === "true" || config.visibility === "false"
-        ? config.visibility
-        : current.visibility,
-      seed_track_ids: Array.isArray(config.seed_track_ids) ? config.seed_track_ids : [],
-      seed_artist_ids: Array.isArray(config.seed_artist_ids) ? config.seed_artist_ids : [],
-      audio_tuning_enabled: typeof config.audio_tuning_enabled === "boolean"
-        ? config.audio_tuning_enabled
-        : current.audio_tuning_enabled,
-      audio_tuning: {
-        energy: Number(config?.audio_tuning?.energy ?? current?.audio_tuning?.energy ?? 50),
-        valence: Number(config?.audio_tuning?.valence ?? current?.audio_tuning?.valence ?? 50),
-        danceability: Number(config?.audio_tuning?.danceability ?? current?.audio_tuning?.danceability ?? 50)
-      }
-    }));
-  }
-
-  async function deletePreset(presetId) {
-    try {
-      const { response, payload } = await apiRequest(`/presets/${presetId}`, {
-        method: "DELETE"
-      });
-
-      if (!response.ok) {
-        throw new Error(getMessage(payload, "Could not delete preset."));
-      }
-
-      setPresetMessage("Preset deleted.");
-      await loadPresets();
-    } catch (error) {
-      setPresetMessage(error.message || "Could not delete preset.");
-    }
   }
 
   function handleRemoveTrack(indexToRemove) {
@@ -669,13 +586,6 @@ function WorkspaceApp() {
             toggleSeedTrack={(trackId) => toggleSeedSelection("seed_track_ids", trackId)}
             toggleSeedArtist={(artistId) => toggleSeedSelection("seed_artist_ids", artistId)}
             updateAudioTuning={updateAudioTuning}
-            presets={presets}
-            presetName={presetName}
-            setPresetName={setPresetName}
-            handleSavePreset={handleSavePreset}
-            applyPreset={applyPreset}
-            deletePreset={deletePreset}
-            presetMessage={presetMessage}
             result={result}
             summary={summary}
             surfaceMessage={surfaceMessage}
@@ -726,7 +636,7 @@ function WorkspaceApp() {
 
       {isBootstrapping ? (
         <main className="loading-state">
-          <div className="glass-panel">
+          <div className="glass-panel" role="status" aria-live="polite">
             <p className="eyebrow">Loading studio</p>
             <h2>Checking your Spotify session</h2>
             <p>Once the session is ready, we'll bring your profile, history, and listening insights into the workspace.</p>
