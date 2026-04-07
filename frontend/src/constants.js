@@ -46,8 +46,6 @@ export const defaultForm = {
   vibe: "dreamy",
   count: 10,
   visibility: "false",
-  seed_track_ids: [],
-  seed_artist_ids: [],
   audio_tuning_enabled: false,
   audio_tuning: {
     energy: 50,

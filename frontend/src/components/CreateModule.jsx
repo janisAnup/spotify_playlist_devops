@@ -20,20 +20,6 @@ function OptionCard({ active, title, caption, onClick }) {
   );
 }
 
-function SeedChip({ active, disabled = false, label, onClick }) {
-  return (
-    <button
-      type="button"
-      className={`chip-button${active ? " is-active" : ""}`}
-      aria-pressed={active}
-      disabled={disabled}
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  );
-}
-
 function ResultPanel({ result }) {
   if (!result) {
     return (
@@ -196,17 +182,11 @@ export default function CreateModule({
   handleRemoveTrack,
   handleMoveTrackUp,
   handleMoveTrackDown,
-  insights,
-  toggleSeedTrack,
-  toggleSeedArtist,
   updateAudioTuning,
   result,
   summary,
   surfaceMessage
 }) {
-  const topTracks = Array.isArray(insights?.top_tracks) ? insights.top_tracks : [];
-  const topArtists = Array.isArray(insights?.top_artists) ? insights.top_artists : [];
-
   return (
     <section className="studio-grid">
       <form className="glass-panel composer-panel" onSubmit={handleGenerate}>
@@ -264,38 +244,6 @@ export default function CreateModule({
                 />
               ))}
             </div>
-          </div>
-
-          <div>
-            <span className="section-label">Seed Tracks (from your top tracks)</span>
-            <div className="chip-row">
-              {topTracks.slice(0, 8).map((track) => (
-                <SeedChip
-                  key={track.id || track.name}
-                  active={Array.isArray(form.seed_track_ids) && form.seed_track_ids.includes(track.id)}
-                  label={track.name}
-                  disabled={!track.id}
-                  onClick={() => toggleSeedTrack(track.id)}
-                />
-              ))}
-            </div>
-            {!topTracks.length ? <p className="surface-message">Top tracks unavailable right now.</p> : null}
-          </div>
-
-          <div>
-            <span className="section-label">Seed Artists (from your top artists)</span>
-            <div className="chip-row">
-              {topArtists.slice(0, 8).map((artist) => (
-                <SeedChip
-                  key={artist.id || artist.name}
-                  active={Array.isArray(form.seed_artist_ids) && form.seed_artist_ids.includes(artist.id)}
-                  label={artist.name}
-                  disabled={!artist.id}
-                  onClick={() => toggleSeedArtist(artist.id)}
-                />
-              ))}
-            </div>
-            {!topArtists.length ? <p className="surface-message">Top artists unavailable right now.</p> : null}
           </div>
 
           <div className="tuning-grid">

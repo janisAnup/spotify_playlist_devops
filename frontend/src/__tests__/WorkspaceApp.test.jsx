@@ -99,6 +99,8 @@ describe("WorkspaceApp", () => {
     });
 
     render(<WorkspaceApp />);
+    await screen.findByRole("button", { name: /start creating/i });
+    fireEvent.click(screen.getByRole("button", { name: /start creating/i }));
     await screen.findByRole("button", { name: /create in spotify/i });
 
     await waitFor(() => {

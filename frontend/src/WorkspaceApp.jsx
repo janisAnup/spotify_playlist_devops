@@ -132,9 +132,6 @@ function WorkspaceApp() {
     const visibility = form.visibility === "true" ? "Public" : "Private";
     const fallbackTitle = `${moodLabel} ${form.genre} set`;
     const fallbackDescription = `${form.count} tracks with a ${vibeLabel.toLowerCase()} tone, saved as ${visibility.toLowerCase()}.`;
-    const seedArtistCount = Array.isArray(form.seed_artist_ids) ? form.seed_artist_ids.length : 0;
-    const seedTrackCount = Array.isArray(form.seed_track_ids) ? form.seed_track_ids.length : 0;
-
     return {
       title: preview?.playlist_name || fallbackTitle,
       description: preview?.playlist_description || fallbackDescription,
@@ -143,9 +140,7 @@ function WorkspaceApp() {
         form.genre,
         vibeLabel,
         `${form.count} songs`,
-        visibility,
-        seedArtistCount ? `${seedArtistCount} artist seeds` : "",
-        seedTrackCount ? `${seedTrackCount} track seeds` : ""
+        visibility
       ].filter(Boolean)
     };
   }, [form, preview]);
@@ -206,7 +201,7 @@ function WorkspaceApp() {
 
         if (!ignore) {
           setAuthState("authenticated");
-          setActiveTab("create");
+          setActiveTab("welcome");
         }
 
         await Promise.all([loadProfile(ignore), loadHistory(ignore), loadInsights(ignore)]);
@@ -380,8 +375,6 @@ function WorkspaceApp() {
     form.vibe,
     form.count,
     form.visibility,
-    form.seed_artist_ids,
-    form.seed_track_ids,
     form.audio_tuning_enabled,
     form.audio_tuning
   ]);
@@ -477,30 +470,6 @@ function WorkspaceApp() {
     });
   }
 
-  function toggleSeedSelection(fieldName, itemId, limit = 5) {
-    setResult(null);
-    setPreviewError("");
-    setForm((current) => {
-      const currentValues = Array.isArray(current[fieldName]) ? current[fieldName] : [];
-      if (currentValues.includes(itemId)) {
-        return {
-          ...current,
-          [fieldName]: currentValues.filter((value) => value !== itemId)
-        };
-      }
-
-      if (currentValues.length >= limit) {
-        setSurfaceMessage("You can select up to 5 seeds in each group.");
-        return current;
-      }
-
-      return {
-        ...current,
-        [fieldName]: [...currentValues, itemId]
-      };
-    });
-  }
-
   function updateAudioTuning(featureName, value) {
     const normalizedValue = Math.max(0, Math.min(100, Number(value) || 0));
     setResult(null);
@@ -582,9 +551,6 @@ function WorkspaceApp() {
             handleRemoveTrack={handleRemoveTrack}
             handleMoveTrackUp={handleMoveTrackUp}
             handleMoveTrackDown={handleMoveTrackDown}
-            insights={insights}
-            toggleSeedTrack={(trackId) => toggleSeedSelection("seed_track_ids", trackId)}
-            toggleSeedArtist={(artistId) => toggleSeedSelection("seed_artist_ids", artistId)}
             updateAudioTuning={updateAudioTuning}
             result={result}
             summary={summary}
